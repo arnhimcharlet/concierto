@@ -115,33 +115,25 @@ export function QueueWaitingRoom({ queueState, loading, error, onJoinQueue, onEn
           className="text-center space-y-8 max-w-md w-full"
         >
           <div>
-            <div className="text-7xl font-black text-primary mb-2">
-              {queueState?.position.toLocaleString()}
+            <div className="w-20 h-20 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+              <Clock className="h-10 w-10 text-primary animate-spin" />
             </div>
-            <p className="text-muted-foreground">Your position in queue</p>
+            <h2 className="text-2xl font-bold mt-6">Preparing your session...</h2>
+            <p className="text-muted-foreground mt-2">
+              You&apos;ll be redirected to the seat selection page in just a moment.
+            </p>
           </div>
 
           <div className="space-y-2">
             <Progress value={progress} className="h-2" />
             <p className="text-xs text-muted-foreground">
-              {queueState?.total_in_queue.toLocaleString()} people in queue ahead of you
+              {queueState ? (queueState.total_in_queue - queueState.position).toLocaleString() : 0} people ahead of you
             </p>
-          </div>
-
-          <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4" />
-              <span>Est. wait {Math.min(queueState?.estimated_wait_seconds || 0, 999)}s</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Users className="h-4 w-4" />
-              <span>{queueState?.total_in_queue} total</span>
-            </div>
           </div>
 
           <div className="p-4 rounded-lg bg-muted/50 border border-border/40">
             <p className="text-sm text-muted-foreground">
-              Stay on this page. We&apos;ll notify you when it&apos;s your turn. Keep your tab open and don&apos;t refresh.
+              Please wait while we prepare the venue for you. This won&apos;t take long.
             </p>
           </div>
         </motion.div>

@@ -43,7 +43,7 @@ export default function SeatsPage() {
         if (prev <= 1) {
           clearInterval(timer)
           toast.error("Time expired! Your seat hold has been released.")
-          router.push(`/events/${eventId}`)
+          router.push(`/events/${eventId}/queue`)
           return 0
         }
         return prev - 1

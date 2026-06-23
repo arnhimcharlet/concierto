@@ -4,16 +4,16 @@ import { useParams, useRouter } from "next/navigation"
 import { useAuth } from "@/providers/AuthProvider"
 import { useQueue } from "@/hooks/useQueue"
 import { QueueWaitingRoom } from "@/components/queue/QueueWaitingRoom"
-import { Button } from "@/components/ui/button"
 import { ArrowLeft, Ticket } from "lucide-react"
 import Link from "next/link"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 export default function QueuePage() {
   const { eventId } = useParams<{ eventId: string }>()
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const { queueState, loading, error, joinQueue, enterEvent } = useQueue(eventId)
+  const enteredRef = useRef(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -26,6 +26,16 @@ export default function QueuePage() {
       router.push(`/events/${eventId}/seats`)
     }
   }, [queueState?.status, router, eventId])
+
+  useEffect(() => {
+    if (queueState && !enteredRef.current) {
+      enteredRef.current = true
+      const timer = setTimeout(() => {
+        enterEvent()
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [queueState, enterEvent])
 
   if (authLoading || !user) return null
 

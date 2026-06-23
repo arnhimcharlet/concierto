@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
-import { getQueuePosition, markUserEntered } from "@/lib/queue"
+import { getQueuePosition, markUserEntered, serveNextBatch } from "@/lib/queue"
+import { QUEUE_BATCH_SIZE } from "@/lib/constants"
 
 export async function GET(request: NextRequest) {
   const supabase = await createServerSupabaseClient()
@@ -21,11 +22,12 @@ export async function GET(request: NextRequest) {
     const state = await getQueuePosition(eventId, user.id)
 
     if (!state) {
-      return NextResponse.json({ error: "Not in queue" }, { status: 404 })
+      return NextResponse.json(null)
     }
 
     return NextResponse.json(state)
   } catch (error) {
+    console.error("getQueueStatus error:", error)
     return NextResponse.json({ error: "Failed to get queue status" }, { status: 500 })
   }
 }
@@ -43,11 +45,13 @@ export async function PATCH(request: NextRequest) {
 
     if (action === "enter") {
       await markUserEntered(eventId, user.id)
+      await serveNextBatch(eventId, QUEUE_BATCH_SIZE)
       return NextResponse.json({ success: true })
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 })
   } catch (error) {
+    console.error("patchQueueStatus error:", error)
     return NextResponse.json({ error: "Failed to update queue status" }, { status: 500 })
   }
 }

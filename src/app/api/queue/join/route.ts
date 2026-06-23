@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
-import { joinQueue, isQueueOpen } from "@/lib/queue"
+import { joinQueue, isQueueOpen, serveNextBatch } from "@/lib/queue"
+import { QUEUE_BATCH_SIZE } from "@/lib/constants"
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabaseClient()
@@ -34,6 +35,8 @@ export async function POST(request: NextRequest) {
 
     const { position, totalInQueue } = await joinQueue(eventId, user.id)
 
+    await serveNextBatch(eventId, QUEUE_BATCH_SIZE)
+
     return NextResponse.json({
       event_id: eventId,
       position,
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest) {
       is_open: true,
     })
   } catch (error) {
+    console.error("joinQueue error:", error)
     return NextResponse.json({ error: "Failed to join queue" }, { status: 500 })
   }
 }

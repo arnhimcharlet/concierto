@@ -1,5 +1,5 @@
 import { redis, QUEUE_KEY, QUEUE_STATUS_KEY, QUEUE_META_KEY, QUEUE_COUNTER_KEY } from "./redis"
-import { QUEUE_OPEN_BEFORE_SECONDS, TURN_TIMEOUT_SECONDS } from "./constants"
+import { QUEUE_OPEN_BEFORE_SECONDS } from "./constants"
 import type { QueueState } from "./types"
 
 export async function isQueueOpen(onSaleAt: string): Promise<boolean> {
@@ -24,12 +24,23 @@ export async function joinQueue(eventId: string, userId: string): Promise<{ posi
   return { position, totalInQueue: total }
 }
 
+function normalizeStatus(raw: string): QueueState["status"] {
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === "object" && parsed.status) {
+      return parsed.status as QueueState["status"]
+    }
+  } catch {
+  }
+  return raw as QueueState["status"]
+}
+
 export async function getQueuePosition(eventId: string, userId: string): Promise<QueueState | null> {
   const rank = await redis.zrank(QUEUE_KEY(eventId), userId)
   const total = await redis.zcard(QUEUE_KEY(eventId))
-  const status = await redis.hget<string>(QUEUE_STATUS_KEY(eventId), userId)
+  const rawStatus = await redis.hget<string>(QUEUE_STATUS_KEY(eventId), userId)
 
-  if (rank === null || !status) return null
+  if (rank === null || !rawStatus) return null
 
   const meta = await redis.hgetall<{ current_serving?: string; is_open?: string }>(QUEUE_META_KEY(eventId))
   const currentServing = meta?.current_serving ? parseInt(meta.current_serving) : 0
@@ -40,31 +51,47 @@ export async function getQueuePosition(eventId: string, userId: string): Promise
     event_id: eventId,
     position: rank + 1,
     total_in_queue: total,
-    status: status as QueueState["status"],
+    status: normalizeStatus(rawStatus),
     estimated_wait_seconds: estimatedWaitSeconds,
     is_open: meta?.is_open === "true",
   }
 }
 
-export async function serveNextUser(eventId: string): Promise<string | null> {
-  const next = await redis.zpopmin(QUEUE_KEY(eventId), 1)
-  if (!next || next.length === 0) return null
-  const entry = next[0] as { member: string; score: number }
-  const userId = entry.member
-  const data = { status: "invited", invited_at: new Date().toISOString() }
-  await redis.hset(QUEUE_STATUS_KEY(eventId), { [userId]: JSON.stringify(data) })
-  await redis.hset(QUEUE_META_KEY(eventId), { current_serving: entry.score.toString() })
-  await redis.expire(QUEUE_KEY(eventId), TURN_TIMEOUT_SECONDS)
-  return userId
+export async function serveNextBatch(eventId: string, count: number): Promise<string[]> {
+  const next = await redis.zrange(QUEUE_KEY(eventId), 0, count - 1, { withScores: true })
+  if (!next || next.length === 0) return []
+
+  const invited: string[] = []
+  const now = new Date().toISOString()
+
+  for (let i = 0; i < next.length; i += 2) {
+    const userId = next[i] as string
+    const score = next[i + 1] as number
+    const raw = await redis.hget<string>(QUEUE_STATUS_KEY(eventId), userId)
+    if (raw && raw !== "waiting") continue
+    const data = { status: "invited", invited_at: now }
+    await redis.hset(QUEUE_STATUS_KEY(eventId), { [userId]: JSON.stringify(data) })
+    invited.push(userId)
+  }
+
+  const lastScore = next[next.length - 1] as number
+  await redis.hset(QUEUE_META_KEY(eventId), { current_serving: lastScore.toString() })
+  return invited
 }
 
 export async function markUserEntered(eventId: string, userId: string): Promise<void> {
   const entry = await redis.hget<string>(QUEUE_STATUS_KEY(eventId), userId)
-  if (entry) {
-    const parsed = JSON.parse(entry)
-    parsed.status = "entered"
-    await redis.hset(QUEUE_STATUS_KEY(eventId), { [userId]: JSON.stringify(parsed) })
+  if (!entry) return
+
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(entry)
+  } catch {
+    parsed = { status: entry }
   }
+  parsed.status = "entered"
+  await redis.hset(QUEUE_STATUS_KEY(eventId), { [userId]: JSON.stringify(parsed) })
+  await redis.zrem(QUEUE_KEY(eventId), userId)
 }
 
 export async function getQueueCount(eventId: string): Promise<number> {

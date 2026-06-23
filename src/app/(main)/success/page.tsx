@@ -1,0 +1,10 @@
+import { Suspense } from "react"
+import { SuccessContent } from "./SuccessContent"
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[60vh]"><div className="animate-pulse text-muted-foreground">Loading...</div></div>}>
+      <SuccessContent />
+    </Suspense>
+  )
+}
